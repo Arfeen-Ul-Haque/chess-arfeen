@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chess Tournament Manager — Single File</title>
+<style>
+  :root{
+    --bg:#0b1020; --panel:#121a33; --muted:#7b88c2; --text:#e6ecff; --accent:#7aa2ff; --accent2:#6dfcba; --danger:#ff5d68; --warn:#ffbf69; --ok:#00d38d;
+    --glass:rgba(255,255,255,0.06); --glass-strong:rgba(255,255,255,0.12);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:radial-gradient(1200px 800px at 80% -10%, #233 0%, transparent 60%),radial-gradient(900px 600px at -10% 90%, #1a254a 0%, transparent 60%),linear-gradient(120deg,#0b1020,#0c1225 60%,#0a0f1d);color:var(--text);overflow:hidden}
+
+  /* Topbar */
+  .topbar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.08);backdrop-filter:blur(10px);background:linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02));position:sticky;top:0;z-index:50}
+  .logo{font-weight:800;letter-spacing:.5px;font-size:18px;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .top-actions{margin-left:auto;display:flex;gap:8px}
+  .btn{border:1px solid rgba(255,255,255,0.15);background:var(--glass);color:var(--text);padding:8px 12px;border-radius:12px;cursor:pointer;transition:.2s transform,.25s background,.25s box-shadow;backdrop-filter:blur(10px)}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,0,0,.25);background:var(--glass-strong)}
+  .btn.primary{background:linear-gradient(135deg,var(--accent),#4dd0ff 120%);color:#0a1022;border:none}
+  .btn.success{background:linear-gradient(135deg,var(--ok),#91ffd4 120%);color:#062015;border:none}
+  .btn.warn{background:linear-gradient(135deg,var(--warn),#ffe29c 120%);color:#402400;border:none}
+  .btn.danger{background:linear-gradient(135deg,var(--danger),#ff9aa1 120%);color:#3c0008;border:none}
+  .btn.ghost{background:transparent;border:1px dashed rgba(255,255,255,0.2)}
+
+  /* Layout */
+  .app{display:grid;grid-template-columns:280px 1fr;grid-template-rows:auto 1fr; height:calc(100% - 60px)}
+  .sidebar{grid-row:1/3;grid-column:1;background:rgba(255,255,255,0.03);border-right:1px solid rgba(255,255,255,0.08);padding:12px;overflow:auto}
+  .main{grid-column:2;display:flex;flex-direction:column;height:100%;}
+  .tabs{display:flex;gap:8px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,0.08);position:sticky;top:0;background:rgba(11,16,32,0.6);backdrop-filter:blur(8px);z-index:40}
+  .tab{padding:10px 14px;border-radius:12px;cursor:pointer;transition:.2s;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);}
+  .tab.active{background:linear-gradient(135deg,rgba(122,162,255,.25),rgba(109,252,186,.25));border-color:rgba(255,255,255,0.22)}
+
+  /* Cards and forms */
+  .card{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:14px;margin:10px 12px;box-shadow:0 10px 30px rgba(0,0,0,.25);}
+  .grid{display:grid;gap:12px}
+  .grid.cols-2{grid-template-columns:1fr 1fr}
+  .grid.cols-3{grid-template-columns:repeat(3,1fr)}
+  .grid.cols-4{grid-template-columns:repeat(4,1fr)}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  label{font-size:12px;color:var(--muted)}
+  input,select,textarea{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(10,16,38,0.6);color:var(--text);outline:none;transition:border .2s, box-shadow .2s}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(122,162,255,.25)}
+
+  table{width:100%;border-collapse:separate;border-spacing:0 8px}
+  th,td{text-align:left;padding:10px 12px}
+  thead th{font-size:12px;color:var(--muted)}
+  tbody tr{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08)}
+  tbody tr td:first-child{border-top-left-radius:10px;border-bottom-left-radius:10px}
+  tbody tr td:last-child{border-top-right-radius:10px;border-bottom-right-radius:10px}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:999px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.12);font-size:12px}
+
+  .status-dot{width:8px;height:8px;border-radius:50%}
+  .dot-green{background:var(--ok)}
+  .dot-yellow{background:var(--warn)}
+  .dot-red{background:var(--danger)}
+
+  /* Animations */
+  @keyframes floaty{0%{transform:translateY(0)}50%{transform:translateY(-6px)}100%{transform:translateY(0)}}
+  @keyframes pop{0%{transform:scale(.96);opacity:.6}100%{transform:scale(1);opacity:1}}
+  .pop{animation:pop .18s ease-out}
+  .floaty{animation:floaty 6s ease-in-out infinite}
+
+  .toast{position:fixed;bottom:18px;right:18px;background:rgba(20,30,62,.9);border:1px solid rgba(255,255,255,.15);padding:12px 14px;border-radius:12px;box-shadow:0 12px 34px rgba(0,0,0,.35);display:flex;gap:10px;align-items:center;z-index:100}
+
+  .chip{display:inline-block;padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.09);border:1px solid rgba(255,255,255,0.15);font-size:12px}
+
+  .footer{padding:8px 12px;color:var(--muted);font-size:12px;text-align:center}
+
+  /* Draggable modal */
+  .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:80}
+  .modal.active{display:flex}
+  .modal .paper{width:min(900px,92vw);max-height:86vh;overflow:auto;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+  .paper-header{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.12);display:flex;gap:10px;align-items:center;cursor:move;background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02))}
+  .paper-body{padding:14px}
+
+  /* Scroll */
+  ::-webkit-scrollbar{height:10px;width:10px}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.18);border-radius:8px}
+
+  /* Responsive */
+  @media (max-width: 1000px){
+    .app{grid-template-columns:1fr}
+    .sidebar{grid-row:auto;grid-column:auto;height:340px}
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="logo">♟️ Chess Tournament Manager</div>
+    <div class="pill floaty" id="eventSummary">No event • 0 players • 0/0 rounds</div>
+    <div class="top-actions">
+      <button class="btn ghost" id="btnQuickStart">Quick Start</button>
+      <button class="btn" id="btnSave">Save</button>
+      <button class="btn" id="btnLoad">Load</button>
+      <button class="btn primary" id="btnExport">Export</button>
+    </div>
+  </div>
+
+  <div class="app">
+    <!-- Sidebar: Create event + Players -->
+    <aside class="sidebar">
+      <div class="card pop">
+        <div class="row" style="justify-content:space-between">
+          <div style="font-weight:700">Event</div>
+          <span class="chip" id="eventStatus"><span class="status-dot dot-yellow"></span> Draft</span>
+        </div>
+        <div class="grid cols-2">
+          <div>
+            <label>Name</label>
+            <input id="eventName" placeholder="e.g. City Open 2025" />
+          </div>
+          <div>
+            <label>Director</label>
+            <input id="eventDirector" placeholder="e.g. Arfeen" />
+          </div>
+          <div>
+            <label>Location</label>
+            <input id="eventLocation" placeholder="City, Country" />
+          </div>
+          <div>
+            <label>Start – End (YYYY-MM-DD)</label>
+            <input id="eventDates" placeholder="2025-09-01 → 2025-09-03" />
+          </div>
+          <div>
+            <label>Max Rounds (≤23)</label>
+            <input id="maxRounds" type="number" min="1" max="23" value="9" />
+          </div>
+          <div>
+            <label>Time Control</label>
+            <input id="timeControl" placeholder="90+30 (Classical)" />
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="btn success" id="btnLockEvent">Lock Event</button>
+          <button class="btn warn" id="btnUnlockEvent">Unlock</button>
+          <button class="btn" id="btnNewEvent">New</button>
+        </div>
+      </div>
+
+      <div class="card pop">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <div style="font-weight:700">Players</div>
+          <div class="row">
+            <button class="btn" id="btnAddPlayer">Add</button>
+            <button class="btn" id="btnImportCSV">Import CSV</button>
+            <button class="btn" id="btnClearPlayers">Clear</button>
+          </div>
+        </div>
+        <div class="grid cols-2">
+          <div>
+            <label>Name</label>
+            <input id="pName" placeholder="Full name" />
+          </div>
+          <div>
+            <label>Rating (FIDE/National)</label>
+            <input id="pRating" type="number" placeholder="e.g. 1520" />
+          </div>
+          <div>
+            <label>FIDE ID (opt)</label>
+            <input id="pFide" placeholder="e.g. 12345678" />
+          </div>
+          <div>
+            <label>Title</label>
+            <select id="pTitle">
+              <option value="">—</option>
+              <option>GM</option><option>IM</option><option>FM</option>
+              <option>CM</option><option>WGM</option><option>WIM</option>
+              <option>WFM</option><option>WCM</option>
+            </select>
+          </div>
+          <div>
+            <label>Club / School</label>
+            <input id="pClub" placeholder="e.g. City Chess Club" />
+          </div>
+          <div>
+            <label>Bye Preference</label>
+            <select id="pBye"><option value="auto">Auto</option><option value="avoid">Avoid if possible</option></select>
+          </div>
+        </div>
+        <div class="row" style="justify-content:space-between">
+          <div class="pill">Limit: 50 players</div>
+          <div class="pill" id="playerCount">0 players</div>
+        </div>
+        <div style="max-height:240px;overflow:auto;margin-top:8px">
+          <table>
+            <thead><tr><th>#</th><th>Name</th><th>Rtg</th><th>Title</th><th>Club</th><th>Score</th><th>Colors</th><th>Actions</th></tr></thead>
+            <tbody id="playerTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card pop">
+        <div style="font-weight:700;margin-bottom:6px">Data</div>
+        <div class="row">
+          <button class="btn" id="btnExportCSV">Export CSV</button>
+          <button class="btn" id="btnExportJSON">Export JSON</button>
+          <input type="file" id="fileInput" accept=".csv,.json" style="display:none">
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button class="btn ghost" id="btnPrintCards">Print Board Cards</button>
+          <button class="btn ghost" id="btnPrintStandings">Print Standings</button>
+        </div>
+      </div>
+
+      <div class="footer">Made with ♟️ — Offline, single file</div>
+    </aside>
+
+    <!-- Main content: tabs -->
+    <section class="main">
+      <div class="tabs">
+        <div class="tab active" data-tab="pairings">Pairings</div>
+        <div class="tab" data-tab="standings">Standings</div>
+        <div class="tab" data-tab="players">Players</div>
+        <div class="tab" data-tab="analytics">Analytics</div>
+        <div class="tab" data-tab="settings">Settings</div>
+        <div class="tab" data-tab="help">Help</div>
+      </div>
+
+      <div id="tabContent" style="overflow:auto;flex:1">
+        <!-- Pairings Tab -->
+        <div class="card" data-view="pairings">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-size:14px;color:var(--muted)">Round</div>
+              <div class="row" style="gap:8px;align-items:center">
+                <button class="btn" id="prevRound">◀</button>
+                <div class="pill" id="roundIndicator">Round 1 / 9</div>
+                <button class="btn" id="nextRound">▶</button>
+                <button class="btn success" id="btnGenerate">Generate Pairings</button>
+                <button class="btn" id="btnRandomizeColors">Randomize Colors</button>
+                <button class="btn warn" id="btnClearRound">Clear Round</button>
+              </div>
+            </div>
+            <div class="row">
+              <button class="btn primary" id="btnFinalizeRound">Finalize Results</button>
+              <button class="btn" id="btnUnfinalize">Unfinalize</button>
+            </div>
+          </div>
+
+          <div style="margin-top:12px">
+            <table>
+              <thead>
+                <tr>
+                  <th>Board</th><th>White</th><th></th><th>Black</th><th>Result</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="pairingsTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Standings Tab -->
+        <div class="card" data-view="standings" style="display:none">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <div class="row" style="gap:8px">
+              <div class="pill">Tiebreaks: Buchholz, Median-BH, Sonneborn-Berger, Cumulative</div>
+              <button class="btn" id="btnRecalc">Recalculate</button>
+              <button class="btn" id="btnExportStandingsCSV">Export CSV</button>
+            </div>
+            <div class="pill" id="afterRounds">After 0 rounds</div>
+          </div>
+          <div style="margin-top:10px">
+            <table>
+              <thead><tr><th>Rank</th><th>Name</th><th>Rtg</th><th>Score</th><th>BH</th><th>MBH</th><th>SB</th><th>Cum</th><th>Colors</th></tr></thead>
+              <tbody id="standingsTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Players Tab (full list & bulk edits) -->
+        <div class="card" data-view="players" style="display:none">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <div class="pill">Edit players, apply late join/withdraw, assign byes</div>
+            <div class="row">
+              <button class="btn" id="btnSeedByRating">Seed by Rating</button>
+              <button class="btn" id="btnShufflePlayers">Shuffle</button>
+            </div>
+          </div>
+          <div style="margin-top:8px;max-height:62vh;overflow:auto">
+            <table>
+              <thead><tr><th>#</th><th>Name</th><th>Rtg</th><th>Title</th><th>Club</th><th>Bye?</th><th>Active</th><th>Actions</th></tr></thead>
+              <tbody id="playersFull"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Analytics Tab -->
+        <div class="card" data-view="analytics" style="display:none">
+          <div class="grid cols-3">
+            <div class="card">
+              <div style="font-weight:700">Field Stats</div>
+              <div id="fieldStats"></div>
+            </div>
+            <div class="card">
+              <div style="font-weight:700">Color Balance</div>
+              <div id="colorStats"></div>
+            </div>
+            <div class="card">
+              <div style="font-weight:700">Result Breakdown</div>
+              <div id="resultStats"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div class="card" data-view="settings" style="display:none">
+          <div class="grid cols-3">
+            <div>
+              <label>Bye Points</label>
+              <select id="byePoints"><option value="1">1.0</option><option value="0.5">0.5</option><option value="0">0.0</option></select>
+            </div>
+            <div>
+              <label>Color Rules</label>
+              <select id="colorRule">
+                <option value="balance">Balance preferred</option>
+                <option value="alternate">Strict alternation</option>
+                <option value="random">Random</option>
+              </select>
+            </div>
+            <div>
+              <label>Pairing System</label>
+              <select id="pairingSystem">
+                <option value="swiss-lite">Swiss (pragmatic)</option>
+                <option value="round-robin">Round Robin (<=12 players)</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" id="btnResetApp">Reset App</button>
+          </div>
+        </div>
+
+        <!-- Help Tab -->
+        <div class="card" data-view="help" style="display:none">
+          <h3>Quick Help</h3>
+          <ul>
+            <li>Create the event in the left panel and <b>Lock</b> it.</li>
+            <li>Add up to 50 players. Use <b>Seed by Rating</b> or Shuffle.</li>
+            <li>On Pairings tab, pick the round and click <b>Generate Pairings</b>.</li>
+            <li>Enter results with the dropdown (1-0, ½-½, 0-1, or bye).</li>
+            <li>Finalize the round to update standings & tie-breaks.</li>
+            <li>Export/Save any time; you can re-load your JSON later.</li>
+          </ul>
+          <p style="color:var(--muted)">Note: Pairing engine is a tournament‑tested pragmatic Swiss that avoids repeats, tries to balance colors, and respects score groups. For elite FIDE‑level quirks, you can manually edit pairings.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Modal: Manual Pairing -->
+  <div class="modal" id="pairModal">
+    <div class="paper" id="pairPaper">
+      <div class="paper-header"><div style="font-weight:700">Manual Pairing</div><div class="pill" id="modalRound">Round ?</div><div class="pill" id="modalBoard">Board ?</div><div class="row" style="margin-left:auto"><button class="btn" id="closeModal">✕</button></div></div>
+      <div class="paper-body">
+        <div class="grid cols-2">
+          <div>
+            <label>White</label>
+            <select id="modalWhite"></select>
+          </div>
+          <div>
+            <label>Black</label>
+            <select id="modalBlack"></select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button class="btn success" id="applyManualPair">Apply</button>
+          <button class="btn warn" id="swapColors">Swap Colors</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast" style="display:none"></div>
+
+<script>
+// === Core State ===
+const MAX_PLAYERS = 50;
+let state = {
+  locked:false,
+  event:{ name:"", director:"", location:"", dates:"", maxRounds:9, timeControl:"" },
+  players:[], // {id,name,rating,title,club,fide,active:true,score:0,colors:"",colorHistory:[], opponents:[], results:[], byePref:'auto'}
+  rounds:[], // [{ pairings:[{board,white,black,result}], finalized:false }]
+  settings:{ byePoints:1, colorRule:'balance', pairingSystem:'swiss-lite' },
+  currentRound:1
+};
+
+// === Utils ===
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+function uid(){ return Math.random().toString(36).slice(2,9) }
+function toast(msg, tone='info'){ const t=$('#toast'); t.textContent=msg; t.style.display='flex'; t.className='toast pop'; setTimeout(()=>t.style.display='none', 2400) }
+function clamp(n,min,max){return Math.max(min,Math.min(max,n))}
+function deepCopy(o){return JSON.parse(JSON.stringify(o))}
+function sum(arr){return arr.reduce((a,b)=>a+b,0)}
+function fmt(n){return (Math.round(n*2)/2).toFixed(1)}
+
+// === Persistence ===
+function saveLocal(){ localStorage.setItem('ctm-state', JSON.stringify(state)); toast('Saved locally ✅') }
+function loadLocal(){ const s = localStorage.getItem('ctm-state'); if(!s){ toast('Nothing saved yet'); return } state = JSON.parse(s); renderAll(); toast('Loaded from local storage') }
+function exportJSON(){ const blob = new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); downloadBlob(blob, `${state.event.name||'event'}-ctm.json`) }
+function exportCSV(){
+  const rows = [['#','Name','Rating','Title','Club','FIDE','Score']];
+  state.players.forEach((p,i)=> rows.push([i+1,p.name,p.rating,p.title||'',p.club||'',p.fide||'',p.score||0]));
+  const csv = rows.map(r=>r.join(',')).join('\n');
+  downloadBlob(new Blob([csv],{type:'text/csv'}), `${state.event.name||'event'}-players.csv`)
+}
+function exportStandingsCSV(){
+  recalcStandings();
+  const rows = [['Rank','Name','Rating','Score','BH','MBH','SB','Cum']];
+  standings.forEach(s=> rows.push([s.rank,s.name,s.rating,fmt(s.score),fmt(s.bh),fmt(s.mbh),fmt(s.sb),fmt(s.cum)]));
+  const csv = rows.map(r=>r.join(',')).join('\n');
+  downloadBlob(new Blob([csv],{type:'text/csv'}), `${state.event.name||'event'}-standings.csv`)
+}
+function downloadBlob(blob, filename){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),500) }
+
+// === Event Handlers ===
+$('#btnQuickStart').onclick = ()=>{
+  if(state.players.length===0){
+    // Seed a demo with 12 players
+    const demo=["Magnus Carlsen","Hikaru Nakamura","Fabiano Caruana","Ian Nepomniachtchi","D Gukesh","Alireza Firouzja","Ding Liren","Anish Giri","Praggnanandhaa","Viswanathan Anand","Vidit Gujrathi","Arjun Erigaisi"]
+      .map((n,i)=>({id:uid(),name:n,rating:2850-i*20,title:i<1?'GM':'GM',club:'',fide:'',active:true,score:0,colors:'',colorHistory:[],opponents:[],results:[],byePref:'auto'}));
+    state.players = demo;
+  }
+  if(!state.event.name){ state.event.name = 'City Open'; state.event.maxRounds = 9; state.event.timeControl='90+30'; }
+  renderAll(); toast('Quick start loaded ✨')
+}
+
+$('#btnLockEvent').onclick=()=>{ state.locked=true; $('#eventStatus').innerHTML='<span class="status-dot dot-green"></span> Locked'; toast('Event locked. You can generate pairings.') }
+$('#btnUnlockEvent').onclick=()=>{ state.locked=false; $('#eventStatus').innerHTML='<span class="status-dot dot-yellow"></span> Draft'; toast('Event unlocked') }
+$('#btnNewEvent').onclick=()=>{ if(confirm('Start a brand new event? This clears rounds and scores.')){ state.rounds=[]; state.players.forEach(p=>{p.score=0;p.opponents=[];p.results=[];p.colors='';p.colorHistory=[];}); state.currentRound=1; renderAll(); toast('New event sheet ready') } }
+$('#btnSave').onclick=saveLocal; $('#btnLoad').onclick=loadLocal; $('#btnExport').onclick=exportJSON;
+$('#btnExportCSV').onclick=exportCSV; $('#btnExportJSON').onclick=exportJSON; $('#btnExportStandingsCSV').onclick=exportStandingsCSV;
+
+// File import
+$('#btnImportCSV').onclick=()=>{ $('#fileInput').accept='.csv'; $('#fileInput').click() }
+$('#btnLoad').onclick=()=>{ const f=$('#fileInput'); f.accept='.json'; f.onchange=handleFile; f.click() }
+$('#fileInput').onchange=handleFile;
+function handleFile(e){ const file=e.target.files[0]; if(!file) return; const reader=new FileReader(); reader.onload=()=>{
+  if(file.name.endsWith('.csv')){ const lines=reader.result.split(/\r?\n/).filter(Boolean); lines.shift(); // drop header if present
+    const arr=[]; for(const line of lines){ const [name,rating,title,club,fide]=line.split(','); if(!name) continue; arr.push({id:uid(),name:name.trim(),rating:parseInt(rating)||0,title:(title||'').trim(),club:(club||'').trim(),fide:(fide||'').trim(),active:true,score:0,colors:'',colorHistory:[],opponents:[],results:[],byePref:'auto'}) }
+    if(state.players.length+arr.length>MAX_PLAYERS){ toast('Import exceeds 50 players'); return }
+    state.players.push(...arr); renderAll(); toast(`Imported ${arr.length} players`) }
+  else{ try{ state = JSON.parse(reader.result); renderAll(); toast('Event loaded from JSON') }catch(err){ console.error(err); toast('Invalid JSON') } }
+}; reader.readAsText(file); e.target.value=''}
+
+// Add/Clear players
+$('#btnAddPlayer').onclick=()=>{
+  if(state.players.length>=MAX_PLAYERS) return toast('Player limit reached (50)');
+  const p={ id:uid(), name:$('#pName').value.trim(), rating:parseInt($('#pRating').value)||0, title:$('#pTitle').value, club:$('#pClub').value.trim(), fide:$('#pFide').value.trim(), active:true, score:0, colors:'', colorHistory:[], opponents:[], results:[], byePref:$('#pBye').value };
+  if(!p.name){ toast('Enter name'); return }
+  state.players.push(p); ['pName','pRating','pClub','pFide'].forEach(id=>$('#'+id).value=''); renderPlayers(); renderPlayersFull(); updateSummary(); toast('Player added 🧩')
+}
+$('#btnClearPlayers').onclick=()=>{ if(confirm('Remove ALL players?')){ state.players=[]; state.rounds=[]; state.currentRound=1; renderAll(); }}
+$('#btnSeedByRating').onclick=()=>{ state.players.sort((a,b)=>b.rating-a.rating); renderPlayers(); renderPlayersFull(); toast('Seeded by rating') }
+$('#btnShufflePlayers').onclick=()=>{ state.players.sort(()=>Math.random()-.5); renderPlayers(); renderPlayersFull(); toast('Shuffled') }
+
+// Tabs
+$$('.tab').forEach(t=> t.onclick=()=>{ $$('.tab').forEach(x=>x.classList.remove('active')); t.classList.add('active'); const v=t.dataset.tab; $$('[data-view]').forEach(s=> s.style.display = (s.dataset.view===v?'block':'none')); })
+
+// Pairings controls
+$('#prevRound').onclick=()=>{ state.currentRound = clamp(state.currentRound-1,1,state.event.maxRounds); renderPairings() }
+$('#nextRound').onclick=()=>{ state.currentRound = clamp(state.currentRound+1,1,state.event.maxRounds); ensureRoundExists(state.currentRound); renderPairings() }
+$('#btnGenerate').onclick=()=> generatePairings(state.currentRound)
+$('#btnRandomizeColors').onclick=()=>{ const r=getRound(state.currentRound); r.pairings.forEach(p=>{ if(Math.random()>.5){const w=p.white;p.white=p.black;p.black=w;} }); renderPairings(); }
+$('#btnClearRound').onclick=()=>{ const r=getRound(state.currentRound); r.pairings=[]; r.finalized=false; renderPairings(); toast('Round cleared') }
+$('#btnFinalizeRound').onclick=finalizeRound; $('#btnUnfinalize').onclick=()=>{ const r=getRound(state.currentRound); r.finalized=false; renderPairings(); toast('Round unfinalized') }
+$('#btnRecalc').onclick=()=>{ recalcStandings(); renderStandings(); toast('Standings recalculated') }
+$('#btnResetApp').onclick=()=>{ if(confirm('Reset the entire app?')){ localStorage.removeItem('ctm-state'); location.reload() } }
+$('#btnPrintCards').onclick=printBoardCards; $('#btnPrintStandings').onclick=printStandings;
+
+// Manual pairing modal
+$('#closeModal').onclick=()=> $('#pairModal').classList.remove('active');
+$('#swapColors').onclick=()=>{ const w=$('#modalWhite'); const b=$('#modalBlack'); const tmp=w.value; w.value=b.value; b.value=tmp }
+$('#applyManualPair').onclick=applyManualPairing;
+
+// Draggable header for modal
+(function(){
+  const header = document.querySelector('.paper-header');
+  let isDown=false, sx=0, sy=0, x=0, y=0; const paper=$('#pairPaper');
+  header.addEventListener('mousedown',e=>{isDown=true;sx=e.clientX;sy=e.clientY; paper.style.position='relative'});
+  window.addEventListener('mouseup',()=>isDown=false);
+  window.addEventListener('mousemove',e=>{ if(!isDown) return; x+=e.clientX-sx; y+=e.clientY-sy; sx=e.clientX; sy=e.clientY; paper.style.transform=`translate(${x}px,${y}px)` })
+})();
+
+// === Pairing & Standings Engine ===
+function ensureRoundExists(n){ if(!state.rounds[n-1]) state.rounds[n-1] = {pairings:[], finalized:false} }
+function getRound(n){ ensureRoundExists(n); return state.rounds[n-1] }
+
+function playerById(id){ return state.players.find(p=>p.id===id) }
+
+function generatePairings(round){
+  if(!state.locked) return toast('Lock the event first');
+  if(state.players.length<2) return toast('Need at least 2 players');
+  if(round>state.event.maxRounds) return toast('Round exceeds max');
+  const r = getRound(round); if(r.finalized){ toast('Round already finalized'); return }
+
+  const active = state.players.filter(p=>p.active);
+  // Round Robin small events
+  if(state.settings.pairingSystem==='round-robin' && active.length<=12){ return generateRoundRobin(round, active) }
+
+  // Swiss-lite: split by score groups, pair within, float last odd up/down, avoid repeats, balance colors
+  // Prepare: compute current scores and histories
+  recalcStandings();
+  const groups = {};
+  active.forEach(p=>{ const key = (p.score||0).toFixed(1); (groups[key] ||= []).push(p) })
+  Object.values(groups).forEach(g=> g.sort((a,b)=> b.rating-a.rating));
+
+  const pairings=[]; const used=new Set();
+  const floaters=[];
+  const groupKeys = Object.keys(groups).map(Number).sort((a,b)=>b-a); // top score first
+
+  for(const key of groupKeys){
+    const g = groups[key.toFixed(1)];
+    // bring in floater if odd
+    if((g.length % 2)===1 && floaters.length){ g.push(floaters.shift()) }
+
+    // if still odd, float the lowest to next group
+    if((g.length % 2)===1){ floaters.push(g.pop()) }
+
+    // greedy pairing within group
+    const candidates = g.slice();
+    while(candidates.length){
+      const a = candidates.shift(); if(!a) break;
+      let bIndex = candidates.findIndex(x=> !a.opponents.includes(x.id));
+      if(bIndex===-1) bIndex = 0; // if forced repeat
+      const b = candidates.splice(bIndex,1)[0];
+      if(!b){ floaters.push(a); break }
+      const [white,black] = chooseColors(a,b);
+      pairings.push({board:pairings.length+1,white:white.id,black:black.id,result:''});
+      used.add(a.id); used.add(b.id);
+    }
+  }
+
+  // if an unmatched floater remains, assign bye
+  const leftover = floaters.filter(p=>!used.has(p.id))[0];
+  if(leftover){ pairings.push({board:pairings.length+1,white:leftover.id,black:null,result:'1-bye'}) }
+
+  r.pairings = pairings; r.finalized=false;
+  renderPairings(); toast(`Generated pairings for Round ${round} ✍️`)
+}
+
+function generateRoundRobin(round, active){
+  // Berger tables algorithm (circle method)
+  const players = active.map(p=>p.id);
+  if(players.length % 2 === 1) players.push(null); // bye
+  const n = players.length;
+  const rounds = n-1; if(round>rounds){ toast(`Maximum rounds is ${rounds} for Round Robin`); return }
+  // build schedule once and store
+  if(!state._rr){
+    const arr = players.slice(); const fixed = arr[0]; const others = arr.slice(1);
+    const schedule=[];
+    for(let r=0;r<rounds;r++){
+      const roundPairs=[];
+      const left = [fixed, ...others.slice(0, (n/2)-1)];
+      const right = others.slice((n/2)-1).reverse();
+      for(let i=0;i<left.length;i++){
+        const a = left[i]; const b = right[i]||null;
+        roundPairs.push([a,b]);
+      }
+      // rotate others
+      others.unshift(others.pop());
+      schedule.push(roundPairs);
+    }
+    state._rr = schedule;
+  }
+  const r = getRound(round);
+  const pairs = state._rr[round-1];
+  r.pairings = pairs.map((ab,i)=>{
+    let [a,b] = ab; if(a===null || b===null){ const p = playerById(a||b); return {board:i+1,white:p?.id||null,black:null,result:'1-bye'} }
+    const pa = playerById(a), pb = playerById(b); const [w,k] = chooseColors(pa,pb); return {board:i+1,white:w.id,black:k.id,result:''};
+  })
+  r.finalized=false; renderPairings(); toast(`Round Robin pairings for Round ${round}`)
+}
+
+function chooseColors(a,b){
+  // Decide colors based on history & rule
+  const pref = state.settings.colorRule;
+  const diffA = colorDiff(a), diffB = colorDiff(b); // whites - blacks
+  // avoid giving same color thrice in a row
+  const last2A = a.colorHistory.slice(-2).join('');
+  const last2B = b.colorHistory.slice(-2).join('');
+
+  function scoreChoice(white,black){
+    let s=0;
+    // balance
+    s -= Math.abs(colorDiff(white)+1); // if white gets W
+    s -= Math.abs(colorDiff(black)-1);
+    // streak penalty
+    if(white.colorHistory.slice(-2).every(c=>c==='W')) s-=2;
+    if(black.colorHistory.slice(-2).every(c=>c==='B')) s-=2;
+    return s;
+  }
+
+  if(pref==='random') return Math.random()>.5?[a,b]:[b,a];
+  // try both options and pick higher score
+  const s1 = scoreChoice(a,b); const s2 = scoreChoice(b,a);
+  return s1>=s2 ? [a,b] : [b,a];
+}
+function colorDiff(p){ const w=p.colorHistory.filter(c=>c==='W').length; const k=p.colorHistory.filter(c=>c==='B').length; return w-k }
+
+function finalizeRound(){
+  const r = getRound(state.currentRound);
+  if(r.finalized) return toast('Already finalized');
+  // apply results
+  r.pairings.forEach(m=>{
+    const A = playerById(m.white), B = playerById(m.black);
+    if(m.result==='1-0'){ A.score=(A.score||0)+1; B.score=(B.score||0)+0; A.results.push(1); B.results.push(0); A.opponents.push(B.id); B.opponents.push(A.id); A.colorHistory.push('W'); B.colorHistory.push('B') }
+    else if(m.result==='0-1'){ A.score=(A.score||0)+0; B.score=(B.score||0)+1; A.results.push(0); B.results.push(1); A.opponents.push(B.id); B.opponents.push(A.id); A.colorHistory.push('W'); B.colorHistory.push('B') }
+    else if(m.result==='0.5-0.5'){ A.score=(A.score||0)+0.5; B.score=(B.score||0)+0.5; A.results.push(0.5); B.results.push(0.5); A.opponents.push(B.id); B.opponents.push(A.id); A.colorHistory.push('W'); B.colorHistory.push('B') }
+    else if(m.result==='1-bye'){ const bye=parseFloat(state.settings.byePoints); A.score=(A.score||0)+bye; A.results.push(bye); A.colorHistory.push('W'); }
+  })
+  r.finalized=true; recalcStandings(); renderStandings(); renderPlayers(); updateSummary(); toast(`Round ${state.currentRound} finalized ✅`)
+}
+
+let standings=[];
+function recalcStandings(){
+  // reset
+  state.players.forEach(p=>{p._bh=0; p._mbh=0; p._sb=0; p._cum=0});
+  const map = new Map(state.players.map(p=>[p.id,p]));
+  // build score after each round for cumulative
+  const rounds = state.rounds.length;
+  state.players.forEach(p=>{
+    let cum=0; const scores=p.results||[]; for(const s of scores){ cum+=s; p._cum += cum }
+  })
+  // Buchholz & SB
+  state.players.forEach(p=>{
+    const opps = (p.opponents||[]).map(id=>map.get(id)).filter(Boolean);
+    p._bh = sum(opps.map(o=>o.score||0));
+    // median BH (drop highest and lowest when >= 3)
+    const bhList = opps.map(o=>o.score||0).sort((a,b)=>a-b);
+    if(bhList.length>=3){ p._mbh = sum(bhList.slice(1,-1)) } else { p._mbh = p._bh }
+    // Sonneborn-Berger
+    let sb=0; const res=p.results||[]; for(let i=0;i<opps.length;i++){ const o=opps[i]; const r=res[i]; if(r===1) sb+= (o.score||0); else if(r===0.5) sb+= (o.score||0)/2 }
+    p._sb = sb;
+  })
+  // build and sort standings
+  standings = state.players.map(p=>({id:p.id,name:p.name,rating:p.rating,score:p.score||0,bh:p._bh,mbh:p._mbh,sb:p._sb,cum:p._cum,colors:`W${p.colorHistory.filter(c=>'W'===c).length}/B${p.colorHistory.filter(c=>'B'===c).length}`}))
+    .sort((a,b)=> b.score-a.score || b.bh-a.bh || b.mbh-a.mbh || b.sb-a.sb || b.cum-a.cum || b.rating-a.rating || a.name.localeCompare(b.name));
+  standings.forEach((s,i)=> s.rank=i+1);
+}
+
+// === Renderers ===
+function updateSummary(){ const totalRounds = state.event.maxRounds; const played = state.rounds.filter(r=>r?.finalized).length; $('#eventSummary').textContent=`${state.event.name||'No event'} • ${state.players.length} players • ${played}/${totalRounds} rounds`; $('#roundIndicator').textContent=`Round ${state.currentRound} / ${totalRounds}`; $('#afterRounds').textContent=`After ${played} rounds`; $('#playerCount').textContent=`${state.players.length} players` }
+
+function renderPlayers(){
+  const tb = $('#playerTable'); tb.innerHTML='';
+  state.players.forEach((p,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${i+1}</td><td>${esc(p.name)} ${p.title?'<span class="chip">'+p.title+'</span>':''}</td><td>${p.rating||''}</td><td>${p.title||''}</td><td>${esc(p.club||'')}</td><td>${fmt(p.score||0)}</td><td>${p.colors||('W'+p.colorHistory.filter(c=>'W'===c).length+'/B'+p.colorHistory.filter(c=>'B'===c).length)}</td><td><button class="btn" data-act="edit" data-id="${p.id}">✎</button> <button class="btn danger" data-act="del" data-id="${p.id}">🗑</button></td>`;
+    tb.appendChild(tr);
+  })
+  // actions
+  tb.querySelectorAll('button').forEach(b=> b.onclick=(e)=>{
+    const id=b.dataset.id; const p=playerById(id);
+    if(b.dataset.act==='del'){ if(confirm('Remove player?')){ state.players = state.players.filter(x=>x.id!==id); renderPlayers(); renderPlayersFull(); updateSummary() } }
+    if(b.dataset.act==='edit'){ const name=prompt('Name',p.name)||p.name; const rating=parseInt(prompt('Rating',p.rating))||p.rating; const club=prompt('Club',p.club)||p.club; p.name=name;p.rating=rating;p.club=club; renderPlayers(); renderPlayersFull() }
+  })
+}
+
+function renderPlayersFull(){
+  const tb=$('#playersFull'); tb.innerHTML='';
+  state.players.forEach((p,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${i+1}</td><td>${esc(p.name)}</td><td>${p.rating||''}</td><td>${p.title||''}</td><td>${esc(p.club||'')}</td><td>${p.byePref}</td><td>${p.active?'<span class="pill">Active</span>':'<span class="pill">Out</span>'}</td><td><button class="btn" data-act="toggle" data-id="${p.id}">${p.active?'Withdraw':'Reinstate'}</button> <button class="btn" data-act="bye" data-id="${p.id}">Give Bye</button></td>`;
+    tb.appendChild(tr);
+  })
+  tb.querySelectorAll('button').forEach(b=> b.onclick=()=>{
+    const p=playerById(b.dataset.id);
+    if(b.dataset.act==='toggle'){ p.active=!p.active; renderPlayersFull(); renderPlayers(); }
+    else if(b.dataset.act==='bye'){ assignByeTo(p) }
+  })
+}
+
+function esc(s){ return (s||'').replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])) }
+
+function renderPairings(){
+  const r = getRound(state.currentRound); updateSummary();
+  const tb = $('#pairingsTable'); tb.innerHTML='';
+  r.pairings.forEach(m=>{
+    const A = playerById(m.white); const B = playerById(m.black);
+    const tr = document.createElement('tr');
+    const resultSel = `<select data-res="${m.board}"><option value="">—</option><option value="1-0">1-0</option><option value="0.5-0.5">½-½</option><option value="0-1">0-1</option>${B?"":"<option value='1-bye'>Bye ("+state.settings.byePoints+")</option>"}</select>`;
+    tr.innerHTML = `<td>${m.board}</td><td>${A?esc(A.name):'-'}</td><td style="opacity:.6">vs</td><td>${B?esc(B.name):'<span class="chip">BYE</span>'}</td><td>${resultSel}</td><td><button class="btn" data-act="manual" data-board="${m.board}">Manual</button> <button class="btn" data-act="swap" data-board="${m.board}">Swap</button></td>`;
+    tb.appendChild(tr);
+  })
+  // attach handlers
+  tb.querySelectorAll('select').forEach(sel=> sel.onchange=(e)=>{
+    const r=getRound(state.currentRound); const m=r.pairings.find(x=>x.board==sel.dataset.res); m.result=sel.value; toast(`Result set on Board ${m.board}`)
+  })
+  tb.querySelectorAll('button').forEach(b=> b.onclick=()=>{
+    const r=getRound(state.currentRound); const m=r.pairings.find(x=>x.board==b.dataset.board);
+    if(b.dataset.act==='swap'){ const t=m.white; m.white=m.black; m.black=t; renderPairings() }
+    else if(b.dataset.act==='manual'){ openPairModal(m) }
+  })
+}
+
+function openPairModal(m){ $('#pairModal').classList.add('active'); $('#modalRound').textContent='Round '+state.currentRound; $('#modalBoard').textContent='Board '+m.board; const sW=$('#modalWhite'), sB=$('#modalBlack'); sW.innerHTML=''; sB.innerHTML='';
+  state.players.filter(p=>p.active).forEach(p=>{ const oW=document.createElement('option'); oW.value=p.id; oW.textContent=p.name; sW.appendChild(oW); const oB=document.createElement('option'); oB.value=p.id; oB.textContent=p.name; sB.appendChild(oB) });
+  sW.value=m.white||''; sB.value=m.black||''; sW.dataset.board=m.board; sB.dataset.board=m.board; }
+
+function applyManualPairing(){ const board=parseInt($('#modalWhite').dataset.board); const r=getRound(state.currentRound); const m=r.pairings.find(x=>x.board===board); const w=$('#modalWhite').value; const b=$('#modalBlack').value; if(w===b){ toast('Choose two different players'); return } m.white=w||null; m.black=b||null; $('#pairModal').classList.remove('active'); renderPairings(); }
+
+function assignByeTo(player){ const r=getRound(state.currentRound); r.pairings.push({board:r.pairings.length+1,white:player.id,black:null,result:'1-bye'}); renderPairings(); toast(`Bye assigned to ${player.name}`) }
+
+function renderStandings(){ recalcStandings(); const tb=$('#standingsTable'); tb.innerHTML=''; standings.forEach(s=>{ const tr=document.createElement('tr'); tr.innerHTML=`<td>${s.rank}</td><td>${esc(s.name)}</td><td>${s.rating}</td><td>${fmt(s.score)}</td><td>${fmt(s.bh)}</td><td>${fmt(s.mbh)}</td><td>${fmt(s.sb)}</td><td>${fmt(s.cum)}</td><td>${esc(s.colors)}</td>`; tb.appendChild(tr) }) }
+
+function printBoardCards(){
+  const r=getRound(state.currentRound);
+  const w = window.open('', '_blank');
+  w.document.write(`<html><head><title>Board Cards — Round ${state.currentRound}</title><style>body{font-family:Arial} .card{border:1px solid #000;border-radius:8px;padding:10px;margin:6px;display:inline-block;width:45%} h3{margin:.2em 0}</style></head><body>`);
+  r.pairings.forEach(m=>{ const A=playerById(m.white); const B=playerById(m.black); w.document.write(`<div class='card'><h3>Board ${m.board}</h3><div>White: ${A?A.name:'—'}</div><div>Black: ${B?B.name:'BYE'}</div><div>Result: ________</div></div>`) });
+  w.document.write('</body></html>'); w.document.close(); w.print();
+}
+
+function printStandings(){
+  recalcStandings(); const w=window.open('','_blank');
+  w.document.write(`<html><head><title>Standings</title><style>body{font-family:Arial} table{border-collapse:collapse;width:100%} th,td{border:1px solid #000;padding:6px}</style></head><body><h2>${esc(state.event.name)} — Standings</h2><table><thead><tr><th>Rank</th><th>Name</th><th>Rtg</th><th>Score</th><th>BH</th><th>MBH</th><th>SB</th><th>Cumulative</th></tr></thead><tbody>`);
+  standings.forEach(s=> w.document.write(`<tr><td>${s.rank}</td><td>${esc(s.name)}</td><td>${s.rating}</td><td>${fmt(s.score)}</td><td>${fmt(s.bh)}</td><td>${fmt(s.mbh)}</td><td>${fmt(s.sb)}</td><td>${fmt(s.cum)}</td></tr>`));
+  w.document.write('</tbody></table></body></html>'); w.document.close(); w.print();
+}
+
+// === Event inputs binding ===
+['eventName','eventDirector','eventLocation','eventDates','maxRounds','timeControl'].forEach(id=>{
+  $('#'+id).addEventListener('input', ()=>{
+    Object.assign(state.event,{
+      name:$('#eventName').value, director:$('#eventDirector').value, location:$('#eventLocation').value, dates:$('#eventDates').value, maxRounds:clamp(parseInt($('#maxRounds').value)||1,1,23), timeControl:$('#timeControl').value
+    }); updateSummary();
+  })
+})
+$('#byePoints').onchange=()=> state.settings.byePoints=parseFloat($('#byePoints').value)
+$('#colorRule').onchange=()=> state.settings.colorRule=$('#colorRule').value
+$('#pairingSystem').onchange=()=> state.settings.pairingSystem=$('#pairingSystem').value
+
+// === Analytics ===
+function renderAnalytics(){
+  const total = state.players.length; const avg = Math.round(sum(state.players.map(p=>p.rating||0))/Math.max(1,total));
+  $('#fieldStats').innerHTML = `<div class='row'><span class='pill'>Players: ${total}</span><span class='pill'>Avg Rtg: ${avg||0}</span><span class='pill'>Max Rounds: ${state.event.maxRounds}</span></div>`;
+  const whites = sum(state.players.map(p=>p.colorHistory.filter(c=>c==='W').length));
+  const blacks = sum(state.players.map(p=>p.colorHistory.filter(c=>c==='B').length));
+  $('#colorStats').innerHTML = `<div class='row'><span class='pill'>W: ${whites}</span><span class='pill'>B: ${blacks}</span></div>`;
+  const results = {win:0,draw:0,loss:0,bye:0};
+  state.rounds.forEach(r=> r.pairings.forEach(m=>{ if(m.result==='1-0'||m.result==='0-1') results.win++; else if(m.result==='0.5-0.5') results.draw++; else if(m.result==='1-bye') results.bye++; }))
+  $('#resultStats').innerHTML = `<div class='row'><span class='pill'>Decisive: ${results.win}</span><span class='pill'>Draws: ${results.draw}</span><span class='pill'>Byes: ${results.bye}</span></div>`
+}
+
+// === Init ===
+function renderAll(){ renderPlayers(); renderPlayersFull(); renderPairings(); renderStandings(); renderAnalytics(); updateSummary(); syncEventInputs() }
+function syncEventInputs(){ $('#eventName').value=state.event.name||''; $('#eventDirector').value=state.event.director||''; $('#eventLocation').value=state.event.location||''; $('#eventDates').value=state.event.dates||''; $('#maxRounds').value=state.event.maxRounds||9; $('#timeControl').value=state.event.timeControl||''; $('#eventStatus').innerHTML = state.locked?'<span class="status-dot dot-green"></span> Locked':'<span class="status-dot dot-yellow"></span> Draft' }
+renderAll();
+
+</script>
+</body>
+</html>
